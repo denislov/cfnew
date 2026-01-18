@@ -109,7 +109,6 @@ async function initKVStore(env) {
 }
 
 async function loadKVConfig() {
-
     if (!kvStore) {
         return;
     }
@@ -152,7 +151,10 @@ async function setConfigValue(key, value) {
     await saveKVConfig();
 }
 
-async function detectWorkerRegion(request:any) {
+/**
+ * @param {Request} request
+ */
+async function detectWorkerRegion(request) {
     try {
         const cfCountry = request.cf?.country;
 
@@ -197,6 +199,9 @@ async function getBestBackupIP(workerRegion = '') {
     return selectedIP;
 }
 
+/**
+ * @param {string} region
+ */
 function getNearbyRegions(region) {
     const nearbyMap = {
         'US': ['SG', 'JP', 'KR'],
@@ -213,6 +218,9 @@ function getNearbyRegions(region) {
     return nearbyMap[region] || [];
 }
 
+/**
+ * @param {string} region
+ */
 function getAllRegionsByPriority(region) {
     const nearbyRegions = getNearbyRegions(region);
     const allRegions = ['US', 'SG', 'JP', 'KR', 'DE', 'SE', 'NL', 'FI', 'GB'];
@@ -238,7 +246,10 @@ function getSmartRegionSelection(workerRegion, availableIPs) {
     return sortedIPs;
 }
 
-function parseAddressAndPort(input: string) {
+/**
+ * @param {string} input
+ */
+function parseAddressAndPort(input) {
     if (input.includes('[') && input.includes(']')) {
         const match = input.match(/^\[([^\]]+)\](?::(\d+))?$/);
         if (match) {
@@ -264,6 +275,11 @@ function parseAddressAndPort(input: string) {
 }
 
 export default {
+    /**
+     * @param {Request} request
+     * @param {any} env
+     * @param {any} ctx
+     */
     async fetch(request, env, ctx) {
         try {
 
@@ -306,7 +322,7 @@ export default {
                 }
             }
 
-            const customPreferred: string = getConfigValue('yx', env.yx || env.YX);
+            const customPreferred = getConfigValue('yx', env.yx || env.YX);
             if (customPreferred) {
                 try {
                     const preferredList = customPreferred.split(',').map(item => item.trim()).filter(item => item);
@@ -696,10 +712,6 @@ export default {
                     const normalizedCustomPath = cleanCustomPath.endsWith('/') && cleanCustomPath.length > 1 ? cleanCustomPath.slice(0, -1) : cleanCustomPath;
                     const normalizedPath = url.pathname.endsWith('/') && url.pathname.length > 1 ? url.pathname.slice(0, -1) : url.pathname;
 
-                    if (normalizedPath === normalizedCustomPath) {
-                        return await handleSubscriptionPage(request, at);
-                    }
-
                     if (normalizedPath === normalizedCustomPath + '/sub') {
                         return await handleSubscriptionRequest(request, at, url);
                     }
@@ -722,11 +734,12 @@ export default {
                         const user = url.pathname.replace(/\/$/, '').substring(1);
                         if (isValidFormat(user)) {
                             if (user === at) {
-                                return await handleSubscriptionPage(request, user);
+                                return json({ message: 'handle subscriptpage' }, {
+                                    status: 200,
+                                });
                             } else {
-                                return new Response(JSON.stringify({ error: 'UUID错误 请注意变量名称是u不是uuid' }), {
+                                return json({ error: 'UUID错误 请注意变量名称是u不是uuid' }, {
                                     status: 403,
-                                    headers: { 'Content-Type': 'application/json' }
                                 });
                             }
                         }
@@ -762,13 +775,12 @@ export default {
     },
 };
 
-function generateQuantumultConfig(links) {
-    return btoa(links.join('\n'));
-}
-
 // 全局变量存储ECH调试信息
 let echDebugInfo = '';
 
+/**
+ * @param {string} domain
+ */
 async function fetchECHConfig(domain) {
     if (!enableECH) {
         echDebugInfo = 'ECH功能已禁用';
@@ -1162,7 +1174,20 @@ async function handleWsRequest(request) {
     return new Response(null, { status: 101, webSocket: clientSock });
 }
 
+/**
+ * @param {number | undefined} addrType
+ * @param {string | undefined} host
+ * @param {number | undefined} portNum
+ * @param {any} rawData
+ * @param {any} ws
+ * @param {Uint8Array<ArrayBuffer> | null} respHeader
+ * @param {{ socket: any; }} remoteConnWrapper
+ */
 async function forwardTCP(addrType, host, portNum, rawData, ws, respHeader, remoteConnWrapper) {
+    /**
+     * @param {string | undefined} address
+     * @param {number | undefined} port
+     */
     async function connectAndSend(address, port, useSocks = false) {
         const remoteSock = useSocks ?
             await establishSocksConnection(addrType, address, port) :

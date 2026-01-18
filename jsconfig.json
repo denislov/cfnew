@@ -4,7 +4,9 @@
     "baseUrl": ".", // 项目根路径
     "paths": {
       "@/*": ["./*"] // 别名
-    }
+    },
+    "noImplicitAny": false, // 允许隐式的any类型
+    "strict": false
   },
   "include": ["./**/*"], // 项目包含的文件
   "exclude": ["./d.js"],// 排除的路由
