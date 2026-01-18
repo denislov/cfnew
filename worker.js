@@ -1,4 +1,4 @@
-    import { connect } from 'cloudflare:sockets';
+import { connect } from 'cloudflare:sockets';
 
 // ==================== CORS 支持 ====================
 const corsHeaders = {
