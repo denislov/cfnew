@@ -1,0 +1,234 @@
+===========================================
+Cloudflare Worker 核心函数分析报告
+文件: D:\Workspace\cfnew\明文源吗
+总行数: 6059 行
+===========================================
+
+一、核心函数列表（需要保留）
+===========================================
+
+【1. 工具函数 - 行 96-278】
+- isValidFormat(str)                      // 行 96-99: UUID格式验证
+- isValidIP(ip)                           // 行 101-112: IP地址格式验证
+- initKVStore(env)                        // 行 114-125: KV存储初始化
+- loadKVConfig()                          // 行 127-143: 加载KV配置
+- saveKVConfig()                          // 行 145-156: 保存KV配置
+- getConfigValue(key, defaultValue)       // 行 158-164: 获取配置值
+- setConfigValue(key, value)              // 行 166-169: 设置配置值
+- detectWorkerRegion(request)             // 行 171-194: 检测Worker地区
+- checkIPAvailability(domain, port, timeout) // 行 196-216: 检查IP可用性
+- getBestBackupIP(workerRegion)           // 行 217-236: 获取最佳备用IP
+- getNearbyRegions(region)                // 行 237-252: 获取临近地区
+- getAllRegionsByPriority(region)         // 行 253-259: 获取所有地区（按优先级）
+- getSmartRegionSelection(workerRegion, availableIPs) // 行 260-277: 智能地区选择
+- parseAddressAndPort(input)              // 行 278-301: 解析地址和端口
+
+【2. 主处理函数 - 行 303-1204】
+- export default { async fetch(request, env, ctx) } // 行 303-1204: 主入口函数
+  核心逻辑包括:
+  - 初始化KV存储
+  - 处理环境变量
+  - 路由分发: /api/config, /api/preferred-ips, WebSocket升级, POST请求等
+  - 地区检测和配置
+
+【3. ECH配置函数 - 行 1212-1356】
+- fetchECHConfig(domain)                  // 行 1212-1356: 获取ECH加密配置
+
+【4. 订阅处理函数 - 行 1358-1536】
+- handleSubscriptionRequest(request, user, url) // 行 1358-1536: 处理订阅请求
+  功能: 生成订阅链接（不包含HTML）
+
+【5. 链接生成函数 - 行 1538-1698】
+- generateLinksFromSource(list, user, workerDomain, echConfig) // 行 1538-1620: VLESS链接生成
+- generateTrojanLinksFromSource(list, user, workerDomain, echConfig) // 行 1622-1698: Trojan链接生成
+
+【6. IP获取和解析函数 - 行 1700-1780】
+- fetchDynamicIPs()                       // 行 1700-1746: 获取动态IP列表
+- fetchAndParseWetest(url)                // 行 1748-1780: 解析wetest页面
+
+【7. WebSocket处理函数 - 行 1782-1848】
+- handleWsRequest(request)                // 行 1782-1848: 处理WebSocket请求
+
+【8. TCP/UDP转发函数 - 行 1850-1990】
+- forwardTCP(addrType, host, portNum, rawData, ws, respHeader, remoteConnWrapper) // 行 1850-1920: TCP转发
+- parseWsPacketHeader(chunk, token)       // 行 1922-1942: 解析WebSocket包头
+- makeReadableStream(socket, earlyDataHeader) // 行 1944-1956: 创建可读流
+- connectStreams(remoteSocket, webSocket, headerData, retryFunc) // 行 1958-1972: 连接流
+- forwardUDP(udpChunk, webSocket, respHeader) // 行 1974-1990: UDP转发
+
+【9. SOCKS5支持函数 - 行 1992-2040】
+- establishSocksConnection(addrType, address, port) // 行 1992-2020: 建立SOCKS5连接
+- parseSocksConfig(address)               // 行 2022-2040: 解析SOCKS5配置
+
+【10. Trojan协议函数 - 行 4613-4811】
+- parseTrojanHeader(buffer, ut)           // 行 4613-4712: 解析Trojan协议头
+- sha224Hash(text)                        // 行 4713-4798: SHA-224哈希计算
+- rightRotate(value, amount)              // 行 4799-4801: 位旋转操作
+
+【11. xhttp协议函数 - 行 4803-5220】
+- xhttp_sleep(ms)                         // 行 4810-4812: 延迟函数
+- validate_uuid_xhttp(id, uuid)           // 行 4814-4821: xhttp UUID验证
+- XhttpCounter类                          // 行 4823-4837: 流量计数器
+- concat_typed_arrays(first, ...args)     // 行 4839-4852: 连接类型数组
+- parse_uuid_xhttp(uuid)                  // 行 4854-4862: 解析xhttp UUID
+- get_xhttp_buffer(size)                  // 行 4864-4866: 获取缓冲区
+- read_xhttp_header(readable, uuid_str)   // 行 4868-4968: 读取xhttp头
+- upload_to_remote_xhttp(counter, writer, httpx) // 行 4970-5002: 上传到远程
+- create_xhttp_uploader(httpx, writable)  // 行 5004-5029: 创建上传器
+- create_xhttp_downloader(resp, remote_readable) // 行 5031-5108: 创建下载器
+- connect_to_remote_xhttp(httpx, ...remotes) // 行 5110-5150: 连接到远程xhttp
+- handle_xhttp_client(body, uuid)         // 行 5152-5212: 处理xhttp客户端
+- handleXhttpPost(request)                // 行 5214-5220: 处理xhttp POST请求
+
+【12. 辅助函数 - 行 5222-5236】
+- base64ToArray(b64Str)                   // 行 5222-5226: Base64转数组
+- closeSocketQuietly(socket)              // 行 5228: 安全关闭socket
+- formatIdentifier(arr, offset)           // 行 5231-5235: 格式化标识符
+
+【13. 新版IP处理函数 - 行 5237-5418】
+- fetchAndParseNewIPs()                   // 行 5237-5283: 获取并解析新IP列表
+- generateLinksFromNewIPs(list, user, workerDomain, echConfig) // 行 5285-5332: 从新IP生成VLESS链接
+- generateXhttpLinksFromSource(list, user, workerDomain, echConfig) // 行 5334-5368: 生成xhttp链接
+- generateTrojanLinksFromNewIPs(list, user, workerDomain, echConfig) // 行 5370-5418: 从新IP生成Trojan链接
+
+【14. API处理函数 - 行 5420-5748】
+- handleConfigAPI(request)                // 行 5420-5541: 处理配置API（GET/POST）
+- handlePreferredIPsAPI(request)          // 行 5543-5748: 处理优选IP API（GET/POST/DELETE）
+
+【15. 配置管理函数 - 行 5750-6059】
+- updateConfigVariables()                 // 行 5750-5862: 更新配置变量
+- updateCustomPreferredFromYx()           // 行 5864-5910: 从yx更新自定义优选
+- parseYxToArray(yxValue)                 // 行 5912-5944: 解析yx到数组
+- arrayToYx(array)                        // 行 5946-5953: 数组转yx格式
+- isValidDomain(domain)                   // 行 5955-5958: 验证域名
+- parseTextToArray(content)               // 行 5960-5965: 解析文本到数组
+- fetchPreferredAPI(urls, defaultPort, timeout) // 行 5967-6059: 获取优选API数据
+
+
+二、HTML生成代码段（需要删除）
+===========================================
+
+【HTML段落 1: 首页终端页面 - 行 665-1131】
+起始行: 665 (检查自定义首页URL配置)
+HTML开始: 768 const terminalHtml = `<!DOCTYPE html>
+结束行: 1131 return new Response(terminalHtml, ...)
+
+关键特征:
+- 包含完整的HTML/CSS/JavaScript
+- 终端界面样式和Matrix雨效果
+- 用户交互逻辑（UUID输入）
+- 多语言支持（中文/波斯语）
+
+【HTML段落 2: 订阅页面 - 行 2042-4612】
+函数名: handleSubscriptionPage(request, user)
+起始行: 2042
+HTML开始: 2345 const pageHtml = `<!DOCTYPE html>
+结束行: 约4612
+
+关键特征:
+- 订阅管理界面
+- 客户端选择
+- 系统状态显示
+- 配置管理表单
+- 延迟测试工具
+- 完整的CSS和JavaScript交互逻辑
+
+注意: handleSubscriptionPage函数整体都是HTML生成，应该删除
+
+
+三、需要保留的常量和变量
+===========================================
+
+【全局变量 - 行 0-89】
+- import语句: import { connect } from 'cloudflare:sockets'
+- 配置变量: at, fallbackAddress, socks5Config, customPreferredIPs等
+- 地区映射: regionMapping (行 34-48)
+- 备用IP列表: backupIPs (行 50-64)
+- 直连域名列表: directDomains (行 66-73)
+- 错误消息常量: E_INVALID_DATA, E_INVALID_USER等 (行 75-87)
+- 地址类型常量: ADDRESS_TYPE_IPV4等 (行 92-94)
+
+【xhttp常量 - 行 4803-4809】
+- ACTIVE_CONNECTIONS, XHTTP_BUFFER_SIZE, CONNECT_TIMEOUT_MS等
+
+
+四、订阅格式生成函数（位置未在上述列表中，需要确认）
+===========================================
+
+这些函数在handleSubscriptionRequest中被调用，但定义可能在HTML段落之后:
+- generateClashConfig(finalLinks)
+- generateSurgeConfig(finalLinks)
+- generateQuantumultConfig(finalLinks)    // 行 1205-1211
+- generateSSConfig(finalLinks)
+- generateV2RayConfig(finalLinks)
+- generateLoonConfig(finalLinks)
+
+注意: 需要在文件中搜索这些函数的具体位置并保留
+
+
+五、删除建议
+===========================================
+
+1. 删除整个handleSubscriptionPage函数 (行 2042-4612)
+2. 删除主函数中首页终端HTML生成部分 (行 665-1131)
+3. 保留所有API端点处理逻辑（仅返回JSON，不生成HTML）
+
+
+六、核心功能总结
+===========================================
+
+保留的核心功能:
+✓ WebSocket/TCP/UDP代理转发
+✓ VLESS/Trojan/xhttp协议支持
+✓ SOCKS5代理支持
+✓ 订阅链接生成（纯文本/base64）
+✓ 多种客户端配置格式生成（Clash/Surge/Quantumult等）
+✓ IP优选和地区智能匹配
+✓ KV存储配置管理
+✓ ECH加密客户端Hello支持
+✓ API接口（配置管理、优选IP管理）
+
+删除的HTML界面:
+✗ 首页终端交互界面
+✗ 订阅管理Web界面
+✗ 所有前端JavaScript/CSS
+
+
+七、代码行号映射（关键函数）
+===========================================
+
+核心入口:
+- 行 303-1204: export default fetch()主函数
+
+协议处理:
+- 行 1782-1848: handleWsRequest (WebSocket)
+- 行 5214-5220: handleXhttpPost (xhttp)
+- 行 1358-1536: handleSubscriptionRequest (订阅)
+
+转发逻辑:
+- 行 1850-1920: forwardTCP
+- 行 1974-1990: forwardUDP
+- 行 1958-1972: connectStreams
+
+API接口:
+- 行 5420-5541: handleConfigAPI
+- 行 5543-5748: handlePreferredIPsAPI
+
+HTML页面（需删除）:
+- 行 665-1131: 首页终端
+- 行 2042-4612: 订阅页面
+
+
+八、建议的处理步骤
+===========================================
+
+1. 备份原文件
+2. 删除 handleSubscriptionPage 整个函数（行 2042-4612）
+3. 删除主函数中的终端HTML生成代码（行 768-1131之间的HTML字符串）
+4. 修改根路径 / 的处理，改为返回简单JSON或重定向
+5. 保留所有核心代理、API、订阅生成函数
+6. 测试WebSocket连接、订阅链接生成是否正常
+
+===========================================
+报告生成完成
+===========================================
