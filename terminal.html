@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>终端</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Courier New", monospace;
+            background: #000; color: #00ff00; min-height: 100vh;
+            overflow-x: hidden; position: relative;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .matrix-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            z-index: -1;
+        }
+        .matrix-code-rain {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: -1;
+            overflow: hidden;
+        }
+        .matrix-column {
+            position: absolute; top: -100%; left: 0;
+            color: #00ff00; font-family: "Courier New", monospace;
+            font-size: 14px; line-height: 1.2;
+            text-shadow: 0 0 5px #00ff00;
+            animation: matrix-drop 15s linear infinite;
+        }
+        @keyframes matrix-drop {
+            0% { top: -100%; opacity: 1; }
+            10% { opacity: 1; }
+            90% { opacity: 0.3; }
+            100% { top: 100vh; opacity: 0; }
+        }
+        .terminal {
+            width: 90%; max-width: 800px; height: 500px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1);
+            backdrop-filter: blur(10px);
+            position: relative; z-index: 1;
+            overflow: hidden;
+        }
+        .terminal-header {
+            background: rgba(0, 20, 0, 0.8);
+            padding: 10px 15px;
+            border-bottom: 1px solid #00ff00;
+            display: flex; align-items: center;
+        }
+        .terminal-buttons {
+            display: flex; gap: 8px;
+        }
+        .terminal-button {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #ff5f57; border: none;
+        }
+        .terminal-button:nth-child(2) { background: #ffbd2e; }
+        .terminal-button:nth-child(3) { background: #28ca42; }
+        .terminal-title {
+            margin-left: 15px; color: #00ff00;
+            font-size: 14px; font-weight: bold;
+        }
+        .terminal-body {
+            padding: 20px; height: calc(100% - 50px);
+            overflow-y: auto; font-size: 14px;
+            line-height: 1.4;
+        }
+        .terminal-line {
+            margin-bottom: 8px; display: flex; align-items: center;
+        }
+        .terminal-prompt {
+            color: #00ff00; margin-right: 10px;
+            font-weight: bold;
+        }
+        .terminal-input {
+            background: transparent; border: none; outline: none;
+            color: #00ff00; font-family: "Courier New", monospace;
+            font-size: 14px; flex: 1;
+            caret-color: #00ff00;
+        }
+        .terminal-input::placeholder {
+            color: #00aa00; opacity: 0.7;
+        }
+        .terminal-cursor {
+            display: inline-block; width: 8px; height: 16px;
+            background: #00ff00;
+            margin-left: 2px;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .terminal-output { color: #00aa00; margin: 5px 0; }
+        .terminal-error { color: #ff4444; margin: 5px 0; }
+        .terminal-success { color: #44ff44; margin: 5px 0; }
+        .matrix-text {
+            position: fixed; top: 20px; right: 20px;
+            color: #00ff00; font-family: "Courier New", monospace;
+            font-size: 0.8rem; opacity: 0.6;
+        }
+        .lang-selector {
+            position: fixed; top: 20px; left: 20px; z-index: 1000;
+        }
+        .lang-selector select {
+            background: rgba(0, 20, 0, 0.9);
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            padding: 8px 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            cursor: pointer;
+            text-shadow: 0 0 5px #00ff00;
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+        }
+        [dir="rtl"] .terminal-prompt { margin-right: 0; margin-left: 10px; }
+        [dir="rtl"] .terminal-title { margin-left: 0; margin-right: 15px; }
+        [dir="rtl"] .terminal-cursor { margin-left: 0; margin-right: 2px; }
+    </style>
+</head>
+<body>
+    <div class="matrix-bg"></div>
+    <div class="matrix-code-rain" id="matrixCodeRain"></div>
+    <div class="matrix-text" id="versionText"></div>
+    <div class="lang-selector">
+        <select id="languageSelector" onchange="changeLanguage(this.value)">
+            <option value="zh">🇨🇳 中文</option>
+            <option value="fa">🇮🇷 فارسی</option>
+        </select>
+    </div>
+    <div class="terminal">
+        <div class="terminal-header">
+            <div class="terminal-buttons">
+                <div class="terminal-button"></div>
+                <div class="terminal-button"></div>
+                <div class="terminal-button"></div>
+            </div>
+            <div class="terminal-title" id="terminalTitle"></div>
+        </div>
+        <div class="terminal-body" id="terminalBody"></div>
+    </div>
+
+    <script>
+        // 多语言翻译
+        const translations = {
+            zh: {
+                title: '终端',
+                terminal: '终端',
+                congratulations: '恭喜你来到这',
+                enterU: '请输入你U变量的值',
+                enterD: '请输入你D变量的值',
+                command: '命令: connect [',
+                uuid: 'UUID',
+                path: 'PATH',
+                inputU: '输入U变量的内容并且回车...',
+                inputD: '输入D变量的内容并且回车...',
+                connecting: '正在连接...',
+                invading: '正在入侵...',
+                success: '连接成功！返回结果...',
+                error: '错误: 无效的UUID格式',
+                reenter: '请重新输入有效的UUID'
+            },
+            fa: {
+                title: 'ترمینال',
+                terminal: 'ترمینال',
+                congratulations: 'تبریک می‌گوییم به شما',
+                enterU: 'لطفا مقدار متغیر U خود را وارد کنید',
+                enterD: 'لطفا مقدار متغیر D خود را وارد کنید',
+                command: 'دستور: connect [',
+                uuid: 'UUID',
+                path: 'PATH',
+                inputU: 'محتویات متغیر U را وارد کرده و Enter را بزنید...',
+                inputD: 'محتویات متغیر D را وارد کرده و Enter را بزنید...',
+                connecting: 'در حال اتصال...',
+                invading: 'در حال نفوذ...',
+                success: 'اتصال موفق! در حال بازگشت نتیجه...',
+                error: 'خطا: فرمت UUID نامعتبر',
+                reenter: 'لطفا UUID معتبر را دوباره وارد کنید'
+            }
+        };
+
+        let currentLang = 'zh';
+        let useCustomPath = false; // 通过API或URL参数设置
+
+        // 获取Cookie
+        function getCookie(name) {
+            const value = '; ' + document.cookie;
+            const parts = value.split('; ' + name + '=');
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        // 设置Cookie
+        function setCookie(name, value, days = 365) {
+            const expiryDate = new Date();
+            expiryDate.setFullYear(expiryDate.getFullYear() + Math.floor(days / 365));
+            document.cookie = name + '=' + value + '; path=/; expires=' + expiryDate.toUTCString() + '; SameSite=Lax';
+        }
+
+        // 检测语言
+        function detectLanguage() {
+            const savedLang = localStorage.getItem('preferredLanguage') || getCookie('preferredLanguage');
+            if (savedLang === 'fa' || savedLang === 'fa-IR') return 'fa';
+            if (savedLang === 'zh' || savedLang === 'zh-CN') return 'zh';
+            
+            const browserLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+            if (browserLang.includes('fa')) return 'fa';
+            return 'zh';
+        }
+
+        // 切换语言
+        function changeLanguage(lang) {
+            localStorage.setItem('preferredLanguage', lang);
+            setCookie('preferredLanguage', lang);
+            window.location.reload();
+        }
+
+        // 应用语言设置
+        function applyLanguage(lang) {
+            currentLang = lang;
+            const t = translations[lang];
+            const isFarsi = lang === 'fa';
+            
+            document.documentElement.lang = isFarsi ? 'fa-IR' : 'zh-CN';
+            document.documentElement.dir = isFarsi ? 'rtl' : 'ltr';
+            document.title = t.title;
+            
+            document.getElementById('versionText').textContent = t.terminal;
+            document.getElementById('terminalTitle').textContent = t.terminal;
+            document.getElementById('languageSelector').value = lang;
+            
+            // 渲染终端内容
+            renderTerminalContent(t);
+        }
+
+        // 渲染终端内容
+        function renderTerminalContent(t) {
+            const terminalBody = document.getElementById('terminalBody');
+            terminalBody.innerHTML = '';
+            
+            addTerminalLine(t.congratulations, 'output');
+            addTerminalLine(useCustomPath ? t.enterD : t.enterU, 'output');
+            addTerminalLine(t.command + (useCustomPath ? t.path : t.uuid) + ']', 'output');
+            
+            // 添加输入行
+            const inputLine = document.createElement('div');
+            inputLine.className = 'terminal-line';
+            inputLine.innerHTML = `
+                <span class="terminal-prompt">root:~$</span>
+                <input type="text" class="terminal-input" id="uuidInput" 
+                       placeholder="${useCustomPath ? t.inputD : t.inputU}" autofocus>
+                <span class="terminal-cursor"></span>
+            `;
+            terminalBody.appendChild(inputLine);
+            
+            // 绑定事件
+            const input = document.getElementById('uuidInput');
+            input.focus();
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') handleInput();
+            });
+        }
+
+        // 添加终端行
+        function addTerminalLine(content, type = 'output') {
+            const terminalBody = document.getElementById('terminalBody');
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            line.innerHTML = `
+                <span class="terminal-prompt">root:~$</span>
+                <span class="terminal-${type}">${content}</span>
+            `;
+            
+            // 插入到输入行之前
+            const inputLine = terminalBody.querySelector('.terminal-input')?.parentElement;
+            if (inputLine) {
+                terminalBody.insertBefore(line, inputLine);
+            } else {
+                terminalBody.appendChild(line);
+            }
+            terminalBody.scrollTop = terminalBody.scrollHeight;
+        }
+
+        // 验证UUID格式
+        function isValidUUID(uuid) {
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+        }
+
+        // 处理输入
+        function handleInput() {
+            const input = document.getElementById('uuidInput');
+            const value = input.value.trim();
+            const t = translations[currentLang];
+            
+            if (!value) return;
+            
+            addTerminalLine('connect ' + value, 'output');
+            
+            if (useCustomPath) {
+                // 自定义路径模式
+                const cleanPath = value.startsWith('/') ? value : '/' + value;
+                addTerminalLine(t.connecting, 'output');
+                setTimeout(() => {
+                    addTerminalLine(t.success, 'success');
+                    setTimeout(() => window.location.href = cleanPath, 1000);
+                }, 500);
+            } else {
+                // UUID模式
+                if (isValidUUID(value)) {
+                    addTerminalLine(t.invading, 'output');
+                    setTimeout(() => {
+                        addTerminalLine(t.success, 'success');
+                        setTimeout(() => window.location.href = '/' + value, 1000);
+                    }, 500);
+                } else {
+                    addTerminalLine(t.error, 'error');
+                    addTerminalLine(t.reenter, 'output');
+                }
+            }
+            input.value = '';
+        }
+
+        // 创建Matrix雨效果
+        function createMatrixRain() {
+            const container = document.getElementById('matrixCodeRain');
+            const chars = '01ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+            const columns = Math.floor(window.innerWidth / 18);
+            
+            for (let i = 0; i < columns; i++) {
+                const column = document.createElement('div');
+                column.className = 'matrix-column';
+                column.style.left = (i * 18) + 'px';
+                column.style.animationDelay = (Math.random() * 15) + 's';
+                column.style.animationDuration = (Math.random() * 15 + 8) + 's';
+                column.style.fontSize = (Math.random() * 4 + 12) + 'px';
+                column.style.opacity = Math.random() * 0.8 + 0.2;
+                
+                let text = '';
+                const charCount = Math.floor(Math.random() * 30 + 20);
+                for (let j = 0; j < charCount; j++) {
+                    const char = chars[Math.floor(Math.random() * chars.length)];
+                    const color = Math.random() > 0.1 ? '#00ff00' : '#00aa00';
+                    text += `<span style="color: ${color};">${char}</span><br>`;
+                }
+                column.innerHTML = text;
+                container.appendChild(column);
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            const lang = detectLanguage();
+            applyLanguage(lang);
+            createMatrixRain();
+            
+            // 检查URL参数中是否有mode=path
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('mode') === 'path') {
+                useCustomPath = true;
+                applyLanguage(lang); // 重新渲染
+            }
+        });
+    </script>
+</body>
+</html>

@@ -6,7 +6,7 @@ on:
     branches:
       - '**'  # 仅匹配分支推送，排除标签推送
     paths:
-      - '明文源吗'
+      - 'worker.js'
 
 jobs:
   build-and-obfuscate:
@@ -31,12 +31,12 @@ jobs:
           const fs = require('fs');
           const path = require('path');
           
-          const sourceFileName = '明文源吗';
+          const sourceFileName = 'worker.js';
           const outputFileName = '少年你相信光吗';
           const sourceFilePath = path.join(process.cwd(), sourceFileName);
 
           if (!fs.existsSync(sourceFilePath)) {
-            console.error('错误：在路径 \'' + sourceFilePath + '\' 未找到源文件。请确保您的仓库根目录有名为 \'明文源吗\' 的文件。');
+            console.error('错误：在路径 \'' + sourceFilePath + '\' 未找到源文件。请确保您的仓库根目录有名为 \'worker.js\' 的文件。');
             process.exit(1);
           }
 
