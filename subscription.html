@@ -432,6 +432,51 @@
                     <button class="btn" onclick="loadCurrentConfig()" id="refreshBtn"></button>
                     <button class="btn btn-danger" onclick="resetAllConfig()" id="resetBtn"></button>
                 </div>
+
+                <!-- 优选域名管理 -->
+                <h3 style="color: #00ff00; margin: 25px 0 15px;" id="domainsTitle">[ 优选域名管理 ]</h3>
+                <div class="form-hint" style="margin-bottom: 15px;" id="domainsHint">管理订阅中使用的优选域名列表。需先开启"允许API管理"选项。
+                </div>
+
+                <div id="domainsTableContainer" style="margin-bottom: 20px;">
+                    <table id="domainsTable" style="width: 100%; border-collapse: collapse; border: 1px solid #00ff00;">
+                        <thead>
+                            <tr style="background: rgba(0, 255, 0, 0.1);">
+                                <th style="border: 1px solid #00ff00; padding: 10px; text-align: left;" id="domainCol">
+                                    域名</th>
+                                <th style="border: 1px solid #00ff00; padding: 10px; text-align: left;" id="nameCol">名称
+                                </th>
+                                <th style="border: 1px solid #00ff00; padding: 10px; text-align: center; width: 80px;"
+                                    id="portCol">端口</th>
+                                <th style="border: 1px solid #00ff00; padding: 10px; text-align: center; width: 60px;"
+                                    id="typeCol">类型</th>
+                                <th style="border: 1px solid #00ff00; padding: 10px; text-align: center; width: 80px;"
+                                    id="actionCol">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="domainsTbody"></tbody>
+                    </table>
+                </div>
+
+                <!-- 添加新域名 -->
+                <div class="form-group"
+                    style="background: rgba(0, 20, 0, 0.6); border: 1px solid #00ff00; padding: 15px;">
+                    <label class="form-label" id="addDomainLabel">添加新域名</label>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <input type="text" id="newDomain" class="form-input" style="flex: 2; min-width: 200px;"
+                            placeholder="example.com">
+                        <input type="text" id="newDomainName" class="form-input" style="flex: 1; min-width: 100px;"
+                            placeholder="节点名称">
+                        <input type="number" id="newDomainPort" class="form-input" style="width: 80px;"
+                            placeholder="443" value="443">
+                        <button type="button" class="btn" onclick="addDomain()" id="addDomainBtn">添加</button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <button class="btn" onclick="loadDomains()" id="refreshDomainsBtn">刷新列表</button>
+                    <button class="btn btn-danger" onclick="clearCustomDomains()" id="clearDomainsBtn">清空自定义</button>
+                </div>
             </div>
             <div id="statusMessage" class="status-msg"></div>
         </div>
@@ -835,7 +880,168 @@
                     dkby: document.getElementById('portControl').value
                 });
             });
+
+            // 加载域名列表
+            loadDomains();
         });
+
+        // ===== 域名管理功能 =====
+
+        // 加载域名列表
+        async function loadDomains() {
+            const tbody = document.getElementById('domainsTbody');
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; border: 1px solid #00ff00; color: #00aa00;">${t.loading || '加载中...'}</td></tr>`;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/domains`);
+                const data = await res.json();
+
+                if (!data.success) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; border: 1px solid #00ff00; color: #ffaa00;">${data.error || data.message || '加载失败'}</td></tr>`;
+                    return;
+                }
+
+                let html = '';
+
+                // 内置域名
+                (data.builtin || []).forEach(d => {
+                    const enabled = d.enabled !== false;
+                    const style = enabled ? '' : 'opacity: 0.5;';
+                    html += `<tr style="${style}">
+                        <td style="border: 1px solid #00ff00; padding: 8px;">${d.domain}</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px;">${d.name || d.domain}</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px; text-align: center;">443</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px; text-align: center; color: #00aa00;">内置</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px; text-align: center;">
+                            <button class="btn" style="padding: 5px 10px; margin: 0; font-size: 12px;" 
+                                onclick="toggleBuiltinDomain('${d.domain}', ${!enabled})">${enabled ? '禁用' : '启用'}</button>
+                        </td>
+                    </tr>`;
+                });
+
+                // 自定义域名
+                (data.custom || []).forEach(d => {
+                    html += `<tr>
+                        <td style="border: 1px solid #00ff00; padding: 8px;">${d.domain}</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px;">${d.name || d.domain}</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px; text-align: center;">${d.port || 443}</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px; text-align: center; color: #44ff44;">自定义</td>
+                        <td style="border: 1px solid #00ff00; padding: 8px; text-align: center;">
+                            <button class="btn btn-danger" style="padding: 5px 10px; margin: 0; font-size: 12px;" 
+                                onclick="deleteDomain('${d.domain}')">删除</button>
+                        </td>
+                    </tr>`;
+                });
+
+                if (!html) {
+                    html = `<tr><td colspan="5" style="text-align: center; padding: 20px; border: 1px solid #00ff00; color: #00aa00;">暂无域名数据</td></tr>`;
+                }
+
+                tbody.innerHTML = html;
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; border: 1px solid #00ff00; color: #ff4444;">请求失败: ${e.message}</td></tr>`;
+            }
+        }
+
+        // 添加域名
+        async function addDomain() {
+            const domain = document.getElementById('newDomain').value.trim();
+            const name = document.getElementById('newDomainName').value.trim();
+            const port = parseInt(document.getElementById('newDomainPort').value) || 443;
+
+            if (!domain) {
+                showStatus('请输入域名', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/domains`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain, name: name || domain, port })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showStatus('域名添加成功', 'success');
+                    document.getElementById('newDomain').value = '';
+                    document.getElementById('newDomainName').value = '';
+                    document.getElementById('newDomainPort').value = '443';
+                    loadDomains();
+                } else {
+                    showStatus(data.error || data.message || '添加失败', 'error');
+                }
+            } catch (e) {
+                showStatus('请求失败: ' + e.message, 'error');
+            }
+        }
+
+        // 删除域名
+        async function deleteDomain(domain) {
+            if (!confirm(`确定要删除域名 "${domain}" 吗？`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/domains`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showStatus('域名删除成功', 'success');
+                    loadDomains();
+                } else {
+                    showStatus(data.error || data.message || '删除失败', 'error');
+                }
+            } catch (e) {
+                showStatus('请求失败: ' + e.message, 'error');
+            }
+        }
+
+        // 启用/禁用内置域名
+        async function toggleBuiltinDomain(domain, enabled) {
+            try {
+                const res = await fetch(`${API_BASE}/api/domains`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain, enabled })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showStatus(enabled ? '已启用' : '已禁用', 'success');
+                    loadDomains();
+                } else {
+                    showStatus(data.error || data.message || '操作失败', 'error');
+                }
+            } catch (e) {
+                showStatus('请求失败: ' + e.message, 'error');
+            }
+        }
+
+        // 清空自定义域名
+        async function clearCustomDomains() {
+            if (!confirm('确定要清空所有自定义域名吗？内置域名不会被删除。')) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/domains`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ all: true })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showStatus(`已清空 ${data.deletedCount || 0} 个自定义域名`, 'success');
+                    loadDomains();
+                } else {
+                    showStatus(data.error || data.message || '清空失败', 'error');
+                }
+            } catch (e) {
+                showStatus('请求失败: ' + e.message, 'error');
+            }
+        }
     </script>
 </body>
 

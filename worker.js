@@ -595,6 +595,14 @@ async function handleAPIRoutes(request, url, env) {
         return pathValidationError();
     }
 
+    // /api/domains - 优选域名管理
+    const domainsResult = validateAPIPath(url, '/api/domains');
+    if (domainsResult.valid) {
+        return await handleDomainsAPI(request);
+    } else if (url.pathname.includes('/api/domains')) {
+        return pathValidationError();
+    }
+
     return null; // 不是API路由
 }
 
@@ -2923,6 +2931,278 @@ async function handleConfigAPI(request) {
         status: 405,
         headers: { 'Content-Type': 'application/json' }
     });
+}
+
+// ===== 优选域名管理 API =====
+
+async function handleDomainsAPI(request) {
+    if (!kvStore) {
+        return new Response(JSON.stringify({
+            success: false,
+            error: 'KV存储未配置',
+            message: '需要配置KV存储才能使用此功能'
+        }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
+    const ae = getConfigValue('ae', '') === 'yes';
+    if (!ae) {
+        return new Response(JSON.stringify({
+            success: false,
+            error: 'API功能未启用',
+            message: '出于安全考虑，域名管理API功能默认关闭。请在配置管理页面开启"允许API管理"选项后使用。'
+        }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
+    try {
+        if (request.method === 'GET') {
+            // 获取所有域名（内置 + 自定义）
+            const domainsJson = await kvStore.get('domains');
+            let storedDomains = domainsJson ? JSON.parse(domainsJson) : null;
+
+            // 如果 KV 中没有数据，使用默认的 directDomains
+            if (!storedDomains) {
+                storedDomains = {
+                    builtinDomains: directDomains.map(d => ({
+                        domain: d.domain,
+                        name: d.name || d.domain,
+                        enabled: true
+                    })),
+                    customDomains: []
+                };
+            }
+
+            return new Response(JSON.stringify({
+                success: true,
+                builtin: storedDomains.builtinDomains || [],
+                custom: storedDomains.customDomains || [],
+                total: (storedDomains.builtinDomains?.length || 0) + (storedDomains.customDomains?.length || 0)
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+        } else if (request.method === 'POST') {
+            // 添加域名
+            const body = await request.json();
+
+            if (!body.domain) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '域名是必需的'
+                }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // 验证域名格式
+            if (!isValidDomain(body.domain) && !isValidIP(body.domain)) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '无效的域名或IP格式'
+                }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // 获取现有数据
+            const domainsJson = await kvStore.get('domains');
+            let storedDomains = domainsJson ? JSON.parse(domainsJson) : {
+                builtinDomains: directDomains.map(d => ({
+                    domain: d.domain,
+                    name: d.name || d.domain,
+                    enabled: true
+                })),
+                customDomains: []
+            };
+
+            // 检查是否已存在
+            const allDomains = [...(storedDomains.builtinDomains || []), ...(storedDomains.customDomains || [])];
+            const exists = allDomains.some(d => d.domain === body.domain);
+            if (exists) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '该域名已存在'
+                }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // 添加新域名
+            const newDomain = {
+                domain: body.domain,
+                name: body.name || body.domain,
+                port: body.port || 443,
+                addedAt: new Date().toISOString()
+            };
+
+            storedDomains.customDomains = storedDomains.customDomains || [];
+            storedDomains.customDomains.push(newDomain);
+
+            // 保存到 KV
+            await kvStore.put('domains', JSON.stringify(storedDomains));
+
+            return new Response(JSON.stringify({
+                success: true,
+                message: '域名添加成功',
+                data: newDomain
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+        } else if (request.method === 'DELETE') {
+            // 删除域名
+            const body = await request.json();
+
+            // 清空所有自定义域名
+            if (body.all === true) {
+                const domainsJson = await kvStore.get('domains');
+                let storedDomains = domainsJson ? JSON.parse(domainsJson) : { builtinDomains: [], customDomains: [] };
+
+                const deletedCount = storedDomains.customDomains?.length || 0;
+                storedDomains.customDomains = [];
+
+                await kvStore.put('domains', JSON.stringify(storedDomains));
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    message: `已清空所有自定义域名，共删除 ${deletedCount} 个`,
+                    deletedCount: deletedCount
+                }), {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            if (!body.domain) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '域名是必需的'
+                }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // 获取现有数据
+            const domainsJson = await kvStore.get('domains');
+            let storedDomains = domainsJson ? JSON.parse(domainsJson) : { builtinDomains: [], customDomains: [] };
+
+            // 查找并删除域名
+            const customIndex = storedDomains.customDomains?.findIndex(d => d.domain === body.domain);
+            const builtinIndex = storedDomains.builtinDomains?.findIndex(d => d.domain === body.domain);
+
+            if (customIndex >= 0) {
+                storedDomains.customDomains.splice(customIndex, 1);
+            } else if (builtinIndex >= 0 && body.type === 'builtin') {
+                // 对于内置域名，设置 enabled = false 而不是删除
+                storedDomains.builtinDomains[builtinIndex].enabled = false;
+            } else {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '域名不存在'
+                }), {
+                    status: 404,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            await kvStore.put('domains', JSON.stringify(storedDomains));
+
+            return new Response(JSON.stringify({
+                success: true,
+                message: '域名删除成功'
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+        } else if (request.method === 'PUT') {
+            // 更新域名（可用于启用/禁用内置域名）
+            const body = await request.json();
+
+            if (!body.domain) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '域名是必需的'
+                }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            const domainsJson = await kvStore.get('domains');
+            let storedDomains = domainsJson ? JSON.parse(domainsJson) : {
+                builtinDomains: directDomains.map(d => ({
+                    domain: d.domain,
+                    name: d.name || d.domain,
+                    enabled: true
+                })),
+                customDomains: []
+            };
+
+            // 查找域名
+            let found = false;
+            for (let d of storedDomains.builtinDomains || []) {
+                if (d.domain === body.domain) {
+                    if (body.enabled !== undefined) d.enabled = body.enabled;
+                    if (body.name !== undefined) d.name = body.name;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                for (let d of storedDomains.customDomains || []) {
+                    if (d.domain === body.domain) {
+                        if (body.name !== undefined) d.name = body.name;
+                        if (body.port !== undefined) d.port = body.port;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!found) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '域名不存在'
+                }), {
+                    status: 404,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            await kvStore.put('domains', JSON.stringify(storedDomains));
+
+            return new Response(JSON.stringify({
+                success: true,
+                message: '域名更新成功'
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+    } catch (err) {
+        return new Response(JSON.stringify({
+            success: false,
+            error: '操作失败',
+            message: err.message
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
 }
 
 async function handlePreferredIPsAPI(request) {
